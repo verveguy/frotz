@@ -56,7 +56,7 @@ RANLIB ?= $(shell which ranlib)
 
 # Choose your sound support
 # OPTIONS: ao, none
-export SOUND ?= ao
+SOUND ?= none
 
 # Default sample rate for sound effects.
 # All modern sound interfaces can be expected to support 44100 Hz sample
@@ -71,6 +71,8 @@ BUFFSIZE ?= 4096
 DEFAULT_CONVERTER ?= SRC_SINC_MEDIUM_QUALITY
 
 ifeq ($(SOUND), ao)
+	LDFLAGS += -lao -ldl -lpthread -lm -lsndfile -lvorbisfile -lmodplug -lsamplerate
+	CFLAGS += -pthread
   CURSES_LDFLAGS = -lao -ldl -lpthread -lm \
 	-lsndfile -lvorbisfile -lmodplug -lsamplerate
 endif
@@ -83,7 +85,7 @@ endif
 
 # If your machine's version of curses doesn't support color...
 #
-COLOR ?= yes
+COLOR ?= no
 
 # If this matters, you can choose -lcurses or -lncurses
 CURSES ?= -lncurses
@@ -111,18 +113,53 @@ CURSES ?= -lncurses
 SRCDIR = src
 
 COMMON_DIR = $(SRCDIR)/common
+COMMON_OBJECT = $(COMMON_DIR)/buffer.o \
+	$(COMMON_DIR)/err.o \
+	$(COMMON_DIR)/fastmem.o \
+	$(COMMON_DIR)/files.o \
+	$(COMMON_DIR)/hotkey.o \
+	$(COMMON_DIR)/input.o \
+	$(COMMON_DIR)/main.o \
+	$(COMMON_DIR)/math.o \
+	$(COMMON_DIR)/object.o \
+	$(COMMON_DIR)/process.o \
+	$(COMMON_DIR)/quetzal.o \
+	$(COMMON_DIR)/random.o \
+	$(COMMON_DIR)/redirect.o \
+	$(COMMON_DIR)/screen.o \
+	$(COMMON_DIR)/sound.o \
+	$(COMMON_DIR)/stream.o \
+	$(COMMON_DIR)/table.o \
+	$(COMMON_DIR)/text.o \
+	$(COMMON_DIR)/variable.o
 COMMON_LIB = $(COMMON_DIR)/frotz_common.a
 COMMON_DEFINES = $(COMMON_DIR)/version.c
 HASH = $(COMMON_DIR)/git_hash.h
 
 CURSES_DIR = $(SRCDIR)/curses
+CURSES_OBJECT = $(CURSES_DIR)/ux_init.o \
+	$(CURSES_DIR)/ux_input.o \
+	$(CURSES_DIR)/ux_pic.o \
+	$(CURSES_DIR)/ux_screen.o \
+	$(CURSES_DIR)/ux_text.o \
+	$(CURSES_DIR)/ux_blorb.o \
+	$(CURSES_DIR)/ux_audio.o \
+	$(CURSES_DIR)/ux_resource.o \
+	$(CURSES_DIR)/ux_audio_none.o \
+	$(CURSES_DIR)/ux_locks.o
 CURSES_LIB = $(CURSES_DIR)/frotz_curses.a
 CURSES_DEFINES = $(CURSES_DIR)/defines.h
 
 DUMB_DIR = $(SRCDIR)/dumb
+DUMB_OBJECT = $(DUMB_DIR)/dumb_init.o \
+	$(DUMB_DIR)/dumb_input.o \
+	$(DUMB_DIR)/dumb_output.o \
+	$(DUMB_DIR)/dumb_pic.o \
+	$(DUMB_DIR)/dumb_blorb.o
 DUMB_LIB = $(DUMB_DIR)/frotz_dumb.a
 
 BLORB_DIR = $(SRCDIR)/blorb
+BLORB_OBJECT =  $(BLORB_DIR)/blorblib.o
 BLORB_LIB = $(BLORB_DIR)/blorblib.a
 
 SDL_DIR = $(SRCDIR)/sdl
@@ -151,15 +188,23 @@ $(SUB_CLEAN):
 
 # Main programs
 
-frotz: $(COMMON_LIB) $(CURSES_LIB) $(BLORB_LIB) $(COMMON_LIB)
-	$(CC) $(CFLAGS) $+ -o $@$(EXTENSION) $(CURSES) $(LDFLAGS) \
-		$(CURSES_LDFLAGS)
+#frotz: $(COMMON_LIB) $(CURSES_LIB) $(BLORB_LIB) $(COMMON_LIB)
+#	$(CC) $(CFLAGS) $+ -o $@$(EXTENSION) $(CURSES) $(LDFLAGS) \
+#		$(CURSES_LDFLAGS)
+frotz: $(SRCDIR)/frotz_common.a $(SRCDIR)/frotz_curses.a $(SRCDIR)/blorblib.a
+	$(CC) $(CFLAGS) $^ -o $@$(EXTENSION) $(CURSES) $(LDFLAGS)
 
-dfrotz: $(COMMON_LIB) $(DUMB_LIB) $(BLORB_LIB) $(COMMON_LIB)
-	$(CC) $(CFLAGS) $+ -o $@$(EXTENSION)
+#dfrotz: $(COMMON_LIB) $(DUMB_LIB) $(BLORB_LIB) $(COMMON_LIB)
+#	$(CC) $(CFLAGS) $+ -o $@$(EXTENSION)
 
-sfrotz: $(COMMON_LIB) $(SDL_LIB) $(BLORB_LIB) $(COMMON_LIB)
-	$(CC) $(CFLAGS) $+ -o $@$(EXTENSION) $(LDFLAGS) $(SDL_LDFLAGS)
+#sfrotz: $(COMMON_LIB) $(SDL_LIB) $(BLORB_LIB) $(COMMON_LIB)
+#	$(CC) $(CFLAGS) $+ -o $@$(EXTENSION) $(LDFLAGS) $(SDL_LDFLAGS)
+#dfrotz:  $(SRCDIR)/frotz_common.a $(SRCDIR)/frotz_dumb.a $(SRCDIR)/blorblib.a
+#	$(CC) $(CFLAGS) $^ -o $@$(EXTENSION)
+
+# For some reason, ar isn't working on my Mac OSX 10.13.3. Direct object files work fine
+dfrotz:  $(COMMON_OBJECT) $(DUMB_OBJECT) $(BLORB_OBJECT)
+	$(CC) $(CFLAGS) $^ -o $@$(EXTENSION)
 
 
 # Libs
@@ -171,14 +216,22 @@ sfrotz: $(COMMON_LIB) $(SDL_LIB) $(BLORB_LIB) $(COMMON_LIB)
 %.o: %.c
 	$(CC) $(CFLAGS) -fPIC -fpic -o $@ -c $<
 
-common_lib:	$(COMMON_LIB)
+#common_lib:	$(COMMON_LIB)
 
-curses_lib:	$(CURSES_LIB)
+common_lib: $(SRCDIR)/frotz_common.a
+$(SRCDIR)/frotz_common.a: $(COMMON_DIR)/git_hash.h $(COMMON_DIR)/defines.h $(COMMON_OBJECT)
+#curses_lib:	$(CURSES_LIB)
 
-dumb_lib:	$(DUMB_LIB)
+#dumb_lib:	$(DUMB_LIB)
+curses_lib: $(SRCDIR)/frotz_curses.a
+$(SRCDIR)/frotz_curses.a: $(CURSES_DIR)/defines.h $(CURSES_OBJECT)
 
-blorb_lib:	$(BLORB_LIB)
+#blorb_lib:	$(BLORB_LIB)
+dumb_lib:	$(SRCDIR)/frotz_dumb.a
+$(SRCDIR)/frotz_dumb.a: $(DUMB_OBJECT)
 
+blorb_lib:	$(SRCDIR)/blorblib.a
+$(SRCDIR)/blorblib.a: $(BLORB_OBJECT)
 
 # Defines
 
@@ -190,6 +243,7 @@ $(COMMON_DEFINES):
 	@echo "const char frotz_v_major[] = \"$(MAJOR)\";" >> $@
 	@echo "const char frotz_v_minor[] = \"$(MINOR)\";" >> $@
 	@echo "const char frotz_v_build[] = \"$(BUILD_DATE_TIME)\";" >> $@
+
 
 curses_defines: $(CURSES_DEFINES)
 $(CURSES_DEFINES):
